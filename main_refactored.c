@@ -29,7 +29,7 @@
 #define WINDOW_TITLE "Particle simulation :3"
 
 // Physical constants
-#define GRAVITY -9.81
+#define GRAVITY 9.81
 // #define AIR_RESISTENCE
 // #define ELASTICITY_PARTICLE
 // #define ELASTICITY_WALL
