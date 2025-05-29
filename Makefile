@@ -1,15 +1,34 @@
 CC = gcc
-Flags = -Wall -Wextra -std=C99 -pedantic-errors
-Debug = -g
-Lib = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+CFlags = -Wall -Wextra -std=c99 -pedantic-errors 
+Debug = 0
+Libs  = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
+Src = src
+Build = build
 
-.PHONY: main clean
+.PHONY: all clean
 
-main:
-	$(CC) main_refactored.c -o main $(CFlags) $(Lib) $(Debug)
-	./main
+SRCS := $(wildcard $(Src)/*.c)
+OBJS := $(patsubst $(Src)/%.c,$(Build)/%.o,$(SRCS))
+
+all: $(Build)/main
+
+$(Build):
+	mkdir -p $@
+
+DFlags = 
+ifeq ($(Debug), 1)
+DFlags += -g -O0 # -g enables DWARF symbols for debugging, -O0 is no optimization 
+else 
+CFlags += -O2
+endif
+
+$(Build)/%.o : $(Src)/%.c
+	$(CC) $(CFlags) $(DFlags) -c $< -o $@ 
+
+
+$(Build)/main: $(OBJS)
+	$(CC) $^ -o $@ $(Libs)
 
 clean:
-	rm main
-
+	rm $(Build)/* 
 
