@@ -1,5 +1,11 @@
-1) Implement proper physics solver
-2) Allow for scalability and having multiple particles
-3) Collisions with walls and other particles
-4) Spawning in particles
-5) Color code particles based on some "temperature" (measure of energy, ig kinetic is good enough for now
+[x? (still jittery)] Implement proper physics solver
+[x? (scalability is subjective)] Allow for scalability and having multiple particles
+[x] Collisions with walls and other particles
+[x] Spawning in particles
+[x? (needs more tweaking, shaders too)] Color code particles based on some "temperature" (measure of energy, ig kinetic is good enough for now)
+[x] Timesteps?
+[] 3D mode + free camera
+[x? (needs a lot more tweeking)] Blurred particles for "fluid" effect
+
+The task of a lifetime :3
+[] Optimize
