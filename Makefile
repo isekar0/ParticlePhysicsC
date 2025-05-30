@@ -17,7 +17,7 @@ $(Build):
 
 DFlags = 
 ifeq ($(Debug), 1)
-DFlags += -g -O0 # -g enables DWARF symbols for debugging, -O0 is no optimization 
+DFlags += -O0 -ggdb3 # -g enables DWARF symbols for debugging, -O0 is no optimization 
 else 
 CFlags += -O2
 endif

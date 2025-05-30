@@ -20,10 +20,8 @@ const float renderHeight = 450;
 float offset[3] = float[](0.0, 1.3846153846, 3.2307692308);
 // float weight[3] = float[](0.2270270270, 0.3162162162, 0.0702702703);
 
-float weight[3] = float[](0.99
-                        , 0.099
-                        , 0.001
-                        );
+float weight[3] = float[](0.3270270270, 0.3162162162, 0.0702702703);
+
 
 
 void main()
