@@ -1,9 +1,9 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
+#include <raylib.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <raylib.h>
 
 struct Particles_t {
     // Metadata
@@ -13,11 +13,9 @@ struct Particles_t {
     uint32_t *mass;
     uint32_t *radius;
     // varying values
-    Color *colors;
+    Color   *colors;
     Vector2 *position; // raylib 2D vector = { .x, .y }
     Vector2 *velocity;
-    float *energy;
-    float highest_energy;
 };
 
 struct Tuple_Vector2_t {
