@@ -6,6 +6,8 @@
 #include <assert.h>
 #include <math.h>
 #include <raylib.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 // Solver constants
@@ -23,7 +25,7 @@
 #define CELL_SIZE_FACTOR 2 // cell size = k * max_radius; 1 <= k <= 2
 
 // Array constants
-#define NUM_INIT_SIZE 20
+#define NUM_INIT_SIZE 60
 #define ARRAY_GROWTH_FACTOR 2
 
 // https://stackoverflow.com/a/35212639
@@ -108,57 +110,9 @@ struct Tuple_Vector2_t particlesResolveVelocity( uint32_t m1, uint32_t m2, Vecto
     return new_velocities;
 }
 
-// Maybe integrate the raylib function for partilce-particle collisions
-// bool CheckCollisionCircles(Vector2 center1, float radius1, Vector2 center2, float radius2);
-void particlesCollisionsCheck( struct Particles_t *particles, const uint16_t window_width, const uint16_t window_height, float time_step ) {
-
-    for ( size_t idx = 0; idx < particles->number_of_stored_particles; idx++ ) {
-
-        if ( particles->position[ idx ].x <= 0 + particles->radius[ idx ] ) {
-            particles->position[ idx ].x = particles->radius[ idx ];
-            particles->velocity[ idx ].x *= -1 * DAMPING_WALL;
-        }
-
-        if ( particles->position[ idx ].x >= window_width - particles->radius[ idx ] ) {
-            particles->position[ idx ].x = window_width - particles->radius[ idx ];
-            particles->velocity[ idx ].x *= -1 * DAMPING_WALL;
-        }
-
-        if ( particles->position[ idx ].y < 0 + particles->radius[ idx ] ) {
-            particles->position[ idx ].y = particles->radius[ idx ];
-            particles->velocity[ idx ].y *= -1 * DAMPING_WALL;
-            // particles->velocity[idx].y += particles->mass[idx] * GRAVITY;
-        }
-
-        if ( particles->position[ idx ].y >= window_height - particles->radius[ idx ] ) {
-            particles->position[ idx ].y = window_height - particles->radius[ idx ];
-            particles->velocity[ idx ].y *= -1 * DAMPING_WALL;
-        }
-    }
-
-    for ( size_t idx = 0; idx < particles->number_of_stored_particles - 1; idx++ ) {
-        Vector2  position_idx = particles->position[ idx ];
-        uint32_t radius_idx   = particles->radius[ idx ];
-        uint32_t mass_idx     = particles->mass[ idx ];
-        Vector2  velocity_idx = particles->velocity[ idx ];
-        for ( size_t jdx = idx + 1; jdx < particles->number_of_stored_particles; jdx++ ) {
-            if ( CheckCollisionCircles( position_idx, radius_idx, particles->position[ jdx ], particles->radius[ jdx ] ) ) {
-                Vector2  position_jdx = particles->position[ jdx ];
-                uint32_t mass_jdx     = particles->mass[ jdx ];
-                uint32_t radius_jdx   = particles->radius[ jdx ];
-                Vector2  velocity_jdx = particles->velocity[ jdx ];
-                // solve for final velocities
-                struct Tuple_Vector2_t v1_v2_new = particlesResolveVelocity( mass_idx, mass_jdx, velocity_idx, velocity_jdx, &position_idx, &position_jdx, radius_idx, radius_jdx, time_step );
-                particles->velocity[ idx ]       = v1_v2_new.vec1;
-                particles->velocity[ jdx ]       = v1_v2_new.vec2;
-            }
-        }
-    }
-}
-
 void particlesUpdate( struct Particles_t *particles, const float time_step ) {
     // float highest_energy_iteration = 0;
-    for ( size_t idx = 0; idx < particles->number_of_stored_particles; idx++ ) {
+    for ( size_t idx = 0; idx < particles->length; idx++ ) {
         // update the positions
         particles->position[ idx ].x += 0.5 * 0 * time_step * time_step + particles->velocity[ idx ].x * time_step;
         particles->position[ idx ].y += 0.5 * GRAVITY * time_step * time_step + particles->velocity[ idx ].y * time_step;
@@ -189,29 +143,12 @@ void particlesUpdate( struct Particles_t *particles, const float time_step ) {
     }
 }
 
-// A helper struct for sorting by minX
-typedef struct {
-    int   idx;  // original particle index
-    float minX; // position[idx].x - radius[idx]
-    float maxX; // position[idx].x + radius[idx]
-} BoundEntry;
-
-// Compare two BoundEntry by their minX
-static int CompareBoundEntry( const void *a, const void *b ) {
-    const BoundEntry *A = (const BoundEntry *)a;
-    const BoundEntry *B = (const BoundEntry *)b;
-    if ( A->minX < B->minX )
-        return -1;
-    if ( A->minX > B->minX )
-        return +1;
-    return 0;
-}
-
 void particlesCollisionsCheck_SweepPrune( struct Particles_t *particles,
+                                          struct BoundEntry  *BE,
                                           const uint16_t      window_width,
                                           const uint16_t      window_height,
                                           float               time_step ) {
-    size_t N = particles->number_of_stored_particles;
+    size_t N = particles->length;
 
     // 1) Wall‐bounce / boundary checks (unchanged from before)
     for ( size_t idx = 0; idx < N; idx++ ) {
@@ -221,19 +158,19 @@ void particlesCollisionsCheck_SweepPrune( struct Particles_t *particles,
 
         if ( x <= r ) {
             particles->position[ idx ].x = r;
-            particles->velocity[ idx ].x *= -1.0f * DAMPING_WALL;
+            particles->velocity[ idx ].x *= -DAMPING_WALL;
         }
-        if ( x >= (float)window_width - r ) {
-            particles->position[ idx ].x = (float)window_width - r;
-            particles->velocity[ idx ].x *= -1.0f * DAMPING_WALL;
+        if ( x >= window_width - r ) {
+            particles->position[ idx ].x = window_width - r;
+            particles->velocity[ idx ].x *= -DAMPING_WALL;
         }
         if ( y <= r ) {
             particles->position[ idx ].y = r;
-            particles->velocity[ idx ].y *= -1.0f * DAMPING_WALL;
+            particles->velocity[ idx ].y *= -DAMPING_WALL;
         }
-        if ( y >= (float)window_height - r ) {
-            particles->position[ idx ].y = (float)window_height - r;
-            particles->velocity[ idx ].y *= -1.0f * DAMPING_WALL;
+        if ( y >= window_height - r ) {
+            particles->position[ idx ].y = window_height - r;
+            particles->velocity[ idx ].y *= -DAMPING_WALL;
         }
     }
 
@@ -241,62 +178,414 @@ void particlesCollisionsCheck_SweepPrune( struct Particles_t *particles,
     if ( N < 2 )
         return;
 
-    // 2) Build and sort the “bounds” array by minX
-    BoundEntry *bounds = malloc( N * sizeof( BoundEntry ) );
-    if ( !bounds )
-        return; // out of memory—just bail.
-    for ( size_t i = 0; i < N; i++ ) {
-        float cx         = particles->position[ i ].x;
-        float r          = (float)particles->radius[ i ];
-        bounds[ i ].idx  = (int)i;
-        bounds[ i ].minX = cx - r;
-        bounds[ i ].maxX = cx + r;
-    }
-    qsort( bounds, N, sizeof( BoundEntry ), CompareBoundEntry );
-
-    // 3) “Sweep” through the sorted list
-    // For each entry a = 0..N-2, compare against b = a+1.. until minX[b] > maxX[a].
+    // --- 2) Sweep-and-prune over sorted slots 0..N-1 ---
     for ( size_t a = 0; a < N - 1; a++ ) {
-        int   i     = bounds[ a ].idx;
-        float maxXi = bounds[ a ].maxX;
+        // “a” is the pivot slot.  Retrieve its particle index i:
+        int      i     = BE->idx[ a ];
+        float    maxXi = BE->maxX[ a ]; // right edge of particle i’s x-interval
+        float    px_i  = particles->position[ i ].x;
+        float    py_i  = particles->position[ i ].y;
+        float    ri    = (float)particles->radius[ i ];
+        uint32_t m1    = particles->mass[ i ];
 
-        // HOTSPOT
-        // Look at all subsequent entries whose minX ≤ maxXi
+        // Compare against b = a+1.. until BE->minX[b] > maxXi
         for ( size_t b = a + 1; b < N; b++ ) {
-            if ( bounds[ b ].minX > maxXi ) {
-                // The sorted‐by‐minX property guarantees no further x‐overlaps
+            // If the next slot’s left edge exceeds pivot’s right edge, we’re done
+            if ( BE->minX[ b ] > maxXi ) {
                 break;
             }
 
-            int j = bounds[ b ].idx;
-            // At this point, the intervals [minX[i], maxX[i]] and [minX[j], maxX[j]] do overlap in x.
-            // We now do the full circle‐circle test (y‐coordinate + radii).
-            Vector2 pi = particles->position[ i ];
-            Vector2 pj = particles->position[ j ];
-            float   ri = (float)particles->radius[ i ];
-            float   rj = (float)particles->radius[ j ];
+            // Otherwise, perform a full 2D circle-circle test
+            int   j    = BE->idx[ b ]; // the actual particle index at slot b
+            float px_j = particles->position[ j ].x;
+            float py_j = particles->position[ j ].y;
+            float rj   = (float)particles->radius[ j ];
 
-            if ( CheckCollisionCircles( pi, ri, pj, rj ) ) {
-                // **CALL your impulse solver** exactly as before.
-                uint32_t m1 = particles->mass[ i ];
+            // dx² + dy² <= (ri + rj)² ?
+            float rsum = ri + rj;
+            float dx   = px_i - px_j;
+
+            // if ( dx > rsum || dx < -rsum ) {
+            //     break;
+            // }
+
+            float dy = py_i - py_j;
+
+            // if ( dy > rsum || dy < -rsum ) {
+            //     break;
+            // }
+
+            float dist2 = dx * dx + dy * dy;
+            if ( dist2 <= ( rsum * rsum ) ) {
+                // They overlap—resolve via your existing impulse solver.
                 uint32_t m2 = particles->mass[ j ];
                 Vector2  v1 = particles->velocity[ i ];
                 Vector2  v2 = particles->velocity[ j ];
 
-                // Here, pass &particles->position[i] and &particles->position[j]
-                // so that positional correction is actually written back:
+                // Pass pointers so that positional correction actually updates particles->position[...]:
                 struct Tuple_Vector2_t new_vs =
-                    particlesResolveVelocity( m1, m2, v1, v2,
-                                              &particles->position[ i ],
-                                              &particles->position[ j ],
-                                              (uint32_t)ri, (uint32_t)rj,
-                                              time_step );
+                    particlesResolveVelocity(
+                        m1, m2,
+                        v1, v2,
+                        &particles->position[ i ],
+                        &particles->position[ j ],
+                        (uint32_t)ri, (uint32_t)rj,
+                        time_step );
 
                 particles->velocity[ i ] = new_vs.vec1;
                 particles->velocity[ j ] = new_vs.vec2;
             }
         }
     }
+}
 
-    free( bounds );
+struct Pair {
+    int i, j;
+};
+
+typedef struct {
+    int     i, j;                  // indices of the two colliding particles
+    float   distance;              // Euclidean distance
+    Vector2 normal;                // contact normal (unit)
+    float   penetration_depth;     // raw depth
+    float   penetration_corrected; // clamped depth
+    float   velocity_correction;   // Baumgarte term, if any
+    float   scalar_impulse;        // final impulse magnitude
+    Vector2 impulse_vec;           // impulse vector = scalar_impulse * normal
+} CollisionIntermediate;
+
+void particlesResolveVelocity_NEW(
+    struct Particles_t *particles,
+    struct Pair        *collisions,
+    size_t              collisionCount,
+    float               time_step ) {
+
+    size_t N = particles->length;
+    if ( collisionCount == 0 || N < 2 )
+        return;
+
+    // 1) Allocate one big array of intermediates (heap):
+    CollisionIntermediate *ci =
+        (CollisionIntermediate *)malloc(
+            collisionCount * sizeof( CollisionIntermediate ) );
+    if ( !ci )
+        return; // out of memory
+
+    // 2) Fill in geometry + Baumgarte data for each collision:
+    for ( size_t idx = 0; idx < collisionCount; idx++ ) {
+        int i = collisions[ idx ].i;
+        int j = collisions[ idx ].j;
+        // Defensive bounds check:
+        if ( i < 0 || i >= (int)N || j < 0 || j >= (int)N ) {
+            // Skip invalid pair; mark a dummy entry. We'll never use it in pass (3).
+            ci[ idx ].i = -1;
+            ci[ idx ].j = -1;
+            continue;
+        }
+        ci[ idx ].i = collisions[ idx ].i;
+        ci[ idx ].j = collisions[ idx ].j;
+
+        // --- A) Compute dx, dy, dist, normal ---
+        float dx           = particles->position[ i ].x - particles->position[ j ].x;
+        float dy           = particles->position[ i ].y - particles->position[ j ].y;
+        float dist2        = dx * dx + dy * dy;
+        dist2              = fmaxf( dist2, EPSILON );
+        float dist         = sqrtf( dist2 );
+        ci[ idx ].distance = dist;
+
+        if ( dist < EPSILON ) {
+            ci[ idx ].normal.x = 1.0f;
+            ci[ idx ].normal.y = 0.0f;
+        } else {
+            ci[ idx ].normal.x = dx / dist;
+            ci[ idx ].normal.y = dy / dist;
+        }
+
+        // --- B) Compute penetration depths + correction ---
+        float ri                    = (float)particles->radius[ i ];
+        float rj                    = (float)particles->radius[ j ];
+        float rawDepth              = ( ri + rj ) - dist;
+        ci[ idx ].penetration_depth = rawDepth;
+
+        if ( rawDepth > 0.0f ) {
+            float maxDepth                  = DEPTH_CAP * fminf( ri, rj );
+            float corrected                 = rawDepth * SOLVER_TUNER;
+            corrected                       = fmaxf( -maxDepth, fminf( corrected, maxDepth ) );
+            ci[ idx ].penetration_corrected = corrected;
+        } else {
+            ci[ idx ].penetration_corrected = 0.0f;
+        }
+
+        // --- C) Compute Baumgarte / “velocity correction” term ---
+        if ( rawDepth > 0.0f ) {
+            float residual = rawDepth - ci[ idx ].penetration_corrected;
+            float slopVal  = SLOP_FACTOR * fmaxf( ri, rj );
+            if ( residual > slopVal ) {
+                ci[ idx ].velocity_correction =
+                    BAUMGARTE * ( residual - slopVal ) / time_step;
+            } else {
+                ci[ idx ].velocity_correction = 0.0f;
+            }
+        } else {
+            ci[ idx ].velocity_correction = 0.0f;
+        }
+    }
+
+    // 3) Now do the actual impulse/positional correction pass:
+    for ( size_t idx = 0; idx < collisionCount; idx++ ) {
+        // If we flagged i = -1 because of an out‐of‐bounds pair, skip it:
+        int i = ci[ idx ].i;
+        int j = ci[ idx ].j;
+        if ( i < 0 || j < 0 )
+            continue;
+
+        float    dist = ci[ idx ].distance;
+        Vector2  n    = ci[ idx ].normal;
+        uint32_t m1   = particles->mass[ i ];
+        uint32_t m2   = particles->mass[ j ];
+
+        // --- A) Positional correction (move out of penetration) ---
+        if ( ci[ idx ].penetration_depth > 0.0f ) {
+            float invM1    = 1.0f / (float)m1;
+            float invM2    = 1.0f / (float)m2;
+            float totalInv = invM1 + invM2; // = (m1+m2)/(m1*m2)
+            float p1factor = ( invM1 / totalInv ) * ci[ idx ].penetration_corrected;
+            float p2factor = ( invM2 / totalInv ) * ci[ idx ].penetration_corrected;
+
+            particles->position[ i ].x += p1factor * n.x;
+            particles->position[ i ].y += p1factor * n.y;
+            particles->position[ j ].x -= p2factor * n.x;
+            particles->position[ j ].y -= p2factor * n.y;
+        }
+
+        // --- B) Compute current relative velocity along normal ---
+        Vector2 v1             = particles->velocity[ i ];
+        Vector2 v2             = particles->velocity[ j ];
+        Vector2 rel            = { v1.x - v2.x, v1.y - v2.y };
+        float   velAlongNormal = rel.x * n.x + rel.y * n.y;
+
+        // If they are separating (velAlongNormal > 0) and no Baumgarte push,
+        // skip the impulse.
+        if ( velAlongNormal > 0.0f && ci[ idx ].velocity_correction == 0.0f ) {
+            continue;
+        }
+
+        // --- C) Compute desired normal velocity and impulse scalar ---
+        float vNormDesired = -RESTITUTION * velAlongNormal + ci[ idx ].velocity_correction;
+
+        float invM1 = 1.0f / (float)m1;
+        float invM2 = 1.0f / (float)m2;
+        float denom = invM1 + invM2; // = (m1 + m2)/(m1*m2)
+        float jmag  = ( vNormDesired - velAlongNormal ) / denom;
+
+        ci[ idx ].scalar_impulse = jmag;
+        ci[ idx ].impulse_vec.x  = jmag * n.x;
+        ci[ idx ].impulse_vec.y  = jmag * n.y;
+
+        // --- D) Apply velocity change to both particles ---
+        particles->velocity[ i ].x += invM1 * ci[ idx ].impulse_vec.x;
+        particles->velocity[ i ].y += invM1 * ci[ idx ].impulse_vec.y;
+        particles->velocity[ j ].x -= invM2 * ci[ idx ].impulse_vec.x;
+        particles->velocity[ j ].y -= invM2 * ci[ idx ].impulse_vec.y;
+    }
+
+    // 4) Clean up:
+    free( ci );
+}
+
+void particlesCollisionsCheck_Grid(
+    struct Particles_t *particles,
+    const uint16_t      window_width,
+    const uint16_t      window_height,
+    float               time_step ) {
+
+    size_t N = particles->length;
+    if ( N < 2 )
+        return;
+
+    for ( size_t idx = 0; idx < N; idx++ ) {
+        float x = particles->position[ idx ].x;
+        float y = particles->position[ idx ].y;
+        float r = (float)particles->radius[ idx ];
+
+        if ( x <= r ) {
+            particles->position[ idx ].x = r;
+            particles->velocity[ idx ].x *= -DAMPING_WALL;
+        }
+        if ( x >= window_width - r ) {
+            particles->position[ idx ].x = window_width - r;
+            particles->velocity[ idx ].x *= -DAMPING_WALL;
+        }
+        if ( y <= r ) {
+            particles->position[ idx ].y = r;
+            particles->velocity[ idx ].y *= -DAMPING_WALL;
+        }
+        if ( y >= window_height - r ) {
+            particles->position[ idx ].y = window_height - r;
+            particles->velocity[ idx ].y *= -DAMPING_WALL;
+        }
+    }
+
+    // 1) Find the maximum particle radius (O(N))
+    float maxRadius = 6.0f;
+    for ( size_t i = 0; i < N; i++ ) {
+        float r = (float)particles->radius[ i ];
+        if ( r > maxRadius )
+            maxRadius = r;
+    }
+    // If all radii are zero (unlikely), bail out
+    if ( maxRadius <= 0.0f )
+        return;
+
+    // 2) Choose cellSize = 2 * maxRadius.
+    //    That guarantees any two colliding particles must lie
+    //    in the same or neighbor cell.
+    float cellSize = 2.0f * maxRadius;
+
+    // 3) Compute number of cells in x and y directions
+    int cols      = (int)ceilf( (float)window_width / cellSize );
+    int rows      = (int)ceilf( (float)window_height / cellSize );
+    int cellCount = cols * rows;
+
+    // 4) Allocate & initialize the "head of list" per cell.
+    //    We'll use an array of length `cellCount`, each entry is
+    //    the index of the first particle in that bucket (or -1 if empty).
+    int *cellHeads   = (int *)malloc( cellCount * sizeof( int ) );
+    int *nextIndices = (int *)malloc( N * sizeof( int ) );
+    if ( !cellHeads || !nextIndices ) {
+        // Allocation failure: clean up and return
+        if ( cellHeads )
+            free( cellHeads );
+        if ( nextIndices )
+            free( nextIndices );
+        return;
+    }
+    // Initialize all heads to -1, and all nextIndices to -1
+    for ( int c = 0; c < cellCount; c++ )
+        cellHeads[ c ] = -1;
+    for ( size_t i = 0; i < N; i++ )
+        nextIndices[ i ] = -1;
+
+    // 5) Insert each particle into its grid cell:
+    //    Compute (cx, cy) = floor(x/cellSize), floor(y/cellSize).
+    //    Cell index = cy*cols + cx. Then push into that bucket.
+    for ( int i = 0; i < (int)N; i++ ) {
+        float px = particles->position[ i ].x;
+        float py = particles->position[ i ].y;
+
+        // Clamp into [0..width) or [0..height). If out of bounds,
+        // you can either skip or clamp to valid cell. We assume the
+        // boundary‐bounce code has already kept positions valid.
+        int cx = (int)( px / cellSize );
+        int cy = (int)( py / cellSize );
+        if ( cx < 0 )
+            cx = 0;
+        if ( cy < 0 )
+            cy = 0;
+        if ( cx >= cols )
+            cx = cols - 1;
+        if ( cy >= rows )
+            cy = rows - 1;
+
+        int bucketIndex = cy * cols + cx;
+        // Chain‐in at the front
+        nextIndices[ i ]         = cellHeads[ bucketIndex ];
+        cellHeads[ bucketIndex ] = i;
+    }
+
+    // 6) For each particle i, check only the 3×3 neighborhood
+    //    (its own cell plus eight neighbors). We only compare
+    //    to j > i to avoid double‐testing pairs.
+
+    size_t capacity = N * 4; // heuristic: expect “O(N)” collisions in many fluid cases
+    if ( capacity < 16 )
+        capacity = 16; // never go below 16
+    struct Pair *collisions = (struct Pair *)malloc( capacity * sizeof( struct Pair ) );
+    if ( !collisions ) {
+        free( cellHeads );
+        free( nextIndices );
+        return;
+    }
+    size_t collisionCount = 0;
+    for ( int i = 0; i < (int)N; i++ ) {
+        float px = particles->position[ i ].x;
+        float py = particles->position[ i ].y;
+        float ri = (float)particles->radius[ i ];
+        // uint32_t m1 = particles->mass[ i ];
+        // Vector2  v1 = particles->velocity[ i ];
+
+        // Recompute the cell of i (slightly redundant but simpler)
+        int cx = (int)( px / cellSize );
+        int cy = (int)( py / cellSize );
+        if ( cx < 0 )
+            cx = 0;
+        if ( cy < 0 )
+            cy = 0;
+        if ( cx >= cols )
+            cx = cols - 1;
+        if ( cy >= rows )
+            cy = rows - 1;
+
+        // Loop over neighbor cells dx = -1,0,+1; dy = -1,0,+1
+        for ( int dy = -1; dy <= +1; dy++ ) {
+            int ny = cy + dy;
+            if ( ny < 0 || ny >= rows )
+                continue;
+            for ( int dx = -1; dx <= +1; dx++ ) {
+                int nx = cx + dx;
+                if ( nx < 0 || nx >= cols )
+                    continue;
+
+                int neighborBucket = ny * cols + nx;
+                // Traverse the linked list in neighborBucket
+                for ( int j = cellHeads[ neighborBucket ]; j != -1; j = nextIndices[ j ] ) {
+                    // Only test j > i to avoid double checks and skip self
+                    if ( j <= i )
+                        continue;
+
+                    float px_j = particles->position[ j ].x;
+                    float py_j = particles->position[ j ].y;
+                    float rj   = (float)particles->radius[ j ];
+
+                    // Quick AABB‐style reject (optional, but x/y separation check is cheap):
+                    float dx_ij = px - px_j;
+                    if ( dx_ij > ( ri + rj ) || dx_ij < -( ri + rj ) )
+                        continue;
+                    float dy_ij = py - py_j;
+                    if ( dy_ij > ( ri + rj ) || dy_ij < -( ri + rj ) )
+                        continue;
+
+                    // Precise circle‐circle test:
+                    float dist2 = dx_ij * dx_ij + dy_ij * dy_ij;
+                    float rsum2 = ( ri + rj ) * ( ri + rj );
+                    if ( dist2 <= rsum2 ) {
+
+                        if ( collisionCount >= capacity ) {
+                            // need more room → double the capacity
+                            size_t       newCap = capacity * 2;
+                            struct Pair *tmp    = (struct Pair *)realloc( collisions, newCap * sizeof( struct Pair ) );
+                            if ( !tmp ) {
+                                // failed to expand; bail early
+                                goto cleanup;
+                            }
+                            collisions = tmp;
+                            capacity   = newCap;
+                        }
+
+                        collisions[ collisionCount ].i = i;
+                        collisions[ collisionCount ].j = j;
+                        collisionCount++;
+                    }
+                }
+            }
+        }
+    }
+
+    particlesResolveVelocity_NEW( particles, collisions, collisionCount, time_step );
+
+// 7) Free our temporary arrays
+cleanup:
+    free( collisions );
+    free( cellHeads );
+    free( nextIndices );
 }

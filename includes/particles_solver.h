@@ -9,8 +9,15 @@ void particlesCollisionsCheck( struct Particles_t *particles, const uint16_t win
 void particlesUpdate( struct Particles_t *particles, const float time_step );
 
 void particlesCollisionsCheck_SweepPrune( struct Particles_t *particles,
+                                          struct BoundEntry  *bound_entry,
                                           const uint16_t      window_width,
                                           const uint16_t      window_height,
                                           float               time_step );
+
+void particlesCollisionsCheck_Grid(
+    struct Particles_t *particles,
+    const uint16_t      window_width,
+    const uint16_t      window_height,
+    float               time_step );
 
 #endif
