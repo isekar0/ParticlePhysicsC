@@ -1,5 +1,5 @@
-CC = gcc
-CFlags = -Wall -Wextra -std=c99 -pedantic-errors 
+CC = clang
+CFlags = -std=c99 # -Wall -Wextra -pedantic-errors 
 Debug = 0
 Libs  = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
 Src = src
@@ -17,9 +17,9 @@ $(Build):
 
 DFlags = 
 ifeq ($(Debug), 1)
-DFlags += -O0 -ggdb3 # -g enables DWARF symbols for debugging, -O0 is no optimization 
+DFlags += -O0 -ggdb3 -fno-omit-frame-pointer -fsanitize=address # -g enables DWARF symbols for debugging, -O0 is no optimization 
 else 
-CFlags += -O2
+CFlags += -O3 -mavx2 -msse4.2 -march=core-avx2 # Optimization and SIMD instructions
 endif
 
 $(Build)/%.o : $(Src)/%.c
