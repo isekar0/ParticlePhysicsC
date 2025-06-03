@@ -1,7 +1,7 @@
 #include "../includes/particles_arrays.h"
 
+#include "../includes/constants.h"
 #include "../includes/structs.h"
-// #include "../includes/utils.h"
 #include <assert.h>
 #include <raylib.h>
 #include <stdio.h>
@@ -12,67 +12,6 @@ void boundsFree( struct BoundEntry *bounds ) {
     free( bounds->maxX );
     free( bounds->minX );
 }
-
-// struct BoundEntry boundsCreate( size_t num_bounds ) {
-//     struct BoundEntry bounds;
-
-//     bounds.idx = calloc( num_bounds, sizeof( *bounds.idx ) );
-//     if ( !bounds.idx ) {
-//         fprintf( stderr, "Failed to initalize bounds" );
-//         boundsFree( &bounds );
-//         exit( EXIT_FAILURE );
-//     }
-//     bounds.minX = calloc( num_bounds, sizeof( *bounds.minX ) );
-//     if ( !bounds.minX ) {
-//         fprintf( stderr, "Failed to initalize bounds" );
-//         boundsFree( &bounds );
-//         exit( EXIT_FAILURE );
-//     }
-//     bounds.maxX = calloc( num_bounds, sizeof( *bounds.idx ) );
-//     if ( !bounds.maxX ) {
-//         fprintf( stderr, "Failed to initalize bounds" );
-//         boundsFree( &bounds );
-//         exit( EXIT_FAILURE );
-//     }
-
-//     bounds.size   = num_bounds;
-//     bounds.length = 0;
-
-//     return bounds;
-// }
-
-// void boundsExpand( struct BoundEntry *bounds ) {
-//     size_t new_size = ( (int)bounds->size ) * ARRAY_GROWTH_FACTOR;
-//     // printf("Expand array has been called, current size is %lu and new size will be %lu", bounds->arrays_size, new_size);
-//     struct BoundEntry temp_bounds = *bounds;
-
-//     temp_bounds.idx = realloc( temp_bounds.idx, new_size * sizeof( *bounds->idx ) );
-//     if ( !temp_bounds.idx ) {
-//         fprintf( stderr, "Failed to initialize bounds" );
-//         boundsFree( &temp_bounds );
-//         exit( EXIT_FAILURE );
-//     }
-//     temp_bounds.maxX = realloc( temp_bounds.maxX, new_size * sizeof( *bounds->maxX ) );
-//     if ( !temp_bounds.maxX ) {
-//         fprintf( stderr, "Failed to initialize bounds" );
-//         boundsFree( &temp_bounds );
-//         exit( EXIT_FAILURE );
-//     }
-//     temp_bounds.minX = realloc( temp_bounds.minX, new_size * sizeof( *bounds->minX ) );
-//     if ( !temp_bounds.minX ) {
-//         fprintf( stderr, "Failed to initialize bounds" );
-//         boundsFree( &temp_bounds );
-//         boundsFree( bounds ); // its joever
-
-//         exit( EXIT_FAILURE );
-//     }
-
-//     // once all tests pass, set bounds to be the temp
-//     // bounds->size = new_size;
-//     bounds->idx  = temp_bounds.idx;
-//     bounds->maxX = temp_bounds.maxX;
-//     bounds->minX = temp_bounds.minX;
-// }
 
 struct BoundEntry *gBE_forSort = NULL;
 
@@ -154,8 +93,6 @@ void SortBoundEntrySOA( struct BoundEntry *BE ) {
     gBE_forSort = NULL;
 }
 
-// void SortBoundEntrySOA( struct BoundEntry *BE );
-
 void rebuildBoundEntry( struct Particles_t *p, struct BoundEntry *BE ) {
     size_t N = p->length;
 
@@ -186,8 +123,8 @@ void rebuildBoundEntry( struct Particles_t *p, struct BoundEntry *BE ) {
     //    minX[a] = p->position[a].x − p->radius[a], etc.
     for ( size_t a = 0; a < N; a++ ) {
         BE->idx[ a ]  = (int)a;
-        BE->minX[ a ] = p->position[ a ].x - (float)p->radius[ a ];
-        BE->maxX[ a ] = p->position[ a ].x + (float)p->radius[ a ];
+        BE->minX[ a ] = p->p_x[ a ] - (float)p->radius[ a ];
+        BE->maxX[ a ] = p->p_x[ a ] + (float)p->radius[ a ];
     }
 
     // 3) Sort the three parallel arrays so that minX[] is ascending.
@@ -198,39 +135,53 @@ void particlesFree( struct Particles_t *particles ) {
     free( particles->mass );
     free( particles->radius );
     free( particles->colors );
-    free( particles->position );
-    free( particles->velocity );
+    free( particles->p_x );
+    free( particles->p_y );
+    free( particles->v_x );
+    free( particles->v_y );
     // free(particles);
 }
 
 struct Particles_t particlesCreate( size_t num_particles_init ) {
     struct Particles_t particles;
-    particles.mass = calloc( num_particles_init, sizeof( *particles.mass ) );
+    particles.mass = (float *)aligned_alloc( 32, num_particles_init * sizeof( *particles.mass ) );
     if ( !particles.mass ) {
         fprintf( stderr, "Failed to initialize particles" );
         particlesFree( &particles );
         exit( EXIT_FAILURE );
     }
-    particles.radius = calloc( num_particles_init, sizeof( *particles.radius ) );
+    particles.radius = (float *)aligned_alloc( 32, num_particles_init * sizeof( *particles.radius ) );
     if ( !particles.radius ) {
         fprintf( stderr, "Failed to initialize particles" );
         particlesFree( &particles );
         exit( EXIT_FAILURE );
     }
-    particles.colors = calloc( num_particles_init, sizeof( *particles.colors ) );
+    particles.colors = (Color *)aligned_alloc( 32, num_particles_init * sizeof( *particles.colors ) );
     if ( !particles.colors ) {
         fprintf( stderr, "Failed to initialize particles" );
         particlesFree( &particles );
         exit( EXIT_FAILURE );
     }
-    particles.position = calloc( num_particles_init, sizeof( *particles.position ) );
-    if ( !particles.position ) {
+    particles.p_x = (float *)aligned_alloc( 32, num_particles_init * sizeof( *particles.p_x ) );
+    if ( !particles.p_x ) {
         fprintf( stderr, "Failed to initialize particles" );
         particlesFree( &particles );
         exit( EXIT_FAILURE );
     }
-    particles.velocity = calloc( num_particles_init, sizeof( *particles.velocity ) );
-    if ( !particles.velocity ) {
+    particles.p_y = (float *)aligned_alloc( 32, num_particles_init * sizeof( *particles.p_y ) );
+    if ( !particles.p_y ) {
+        fprintf( stderr, "Failed to initialize particles" );
+        particlesFree( &particles );
+        exit( EXIT_FAILURE );
+    }
+    particles.v_x = (float *)aligned_alloc( 32, num_particles_init * sizeof( *particles.v_x ) );
+    if ( !particles.v_x ) {
+        fprintf( stderr, "Failed to initialize particles" );
+        particlesFree( &particles );
+        exit( EXIT_FAILURE );
+    }
+    particles.v_y = (float *)aligned_alloc( 32, num_particles_init * sizeof( *particles.v_y ) );
+    if ( !particles.v_y ) {
         fprintf( stderr, "Failed to initialize particles" );
         particlesFree( &particles );
         exit( EXIT_FAILURE );
@@ -265,14 +216,26 @@ void particlesExpandArrays( struct Particles_t *particles ) {
         particlesFree( &temp_particles );
         exit( EXIT_FAILURE );
     }
-    temp_particles.position = realloc( temp_particles.position, new_size * sizeof( *particles->position ) );
-    if ( !temp_particles.position ) {
+    temp_particles.p_x = realloc( temp_particles.p_x, new_size * sizeof( *particles->p_x ) );
+    if ( !temp_particles.p_x ) {
         fprintf( stderr, "Failed to initialize particles" );
         particlesFree( &temp_particles );
         exit( EXIT_FAILURE );
     }
-    temp_particles.velocity = realloc( temp_particles.velocity, new_size * sizeof( *particles->velocity ) );
-    if ( !temp_particles.velocity ) {
+    temp_particles.p_y = realloc( temp_particles.p_y, new_size * sizeof( *particles->p_y ) );
+    if ( !temp_particles.p_y ) {
+        fprintf( stderr, "Failed to initialize particles" );
+        particlesFree( &temp_particles );
+        exit( EXIT_FAILURE );
+    }
+    temp_particles.v_x = realloc( temp_particles.v_x, new_size * sizeof( *particles->v_x ) );
+    if ( !temp_particles.v_x ) {
+        fprintf( stderr, "Failed to initialize particles" );
+        particlesFree( &temp_particles );
+        exit( EXIT_FAILURE );
+    }
+    temp_particles.v_y = realloc( temp_particles.v_y, new_size * sizeof( *particles->v_y ) );
+    if ( !temp_particles.v_y ) {
         fprintf( stderr, "Failed to initialize particles" );
         particlesFree( &temp_particles );
         particlesFree( particles ); // its joever
@@ -281,15 +244,17 @@ void particlesExpandArrays( struct Particles_t *particles ) {
     }
 
     // once all tests pass, set particles to be the temp
-    particles->size     = new_size;
-    particles->mass     = temp_particles.mass;
-    particles->radius   = temp_particles.radius;
-    particles->colors   = temp_particles.colors;
-    particles->position = temp_particles.position;
-    particles->velocity = temp_particles.velocity;
+    particles->size   = new_size;
+    particles->mass   = temp_particles.mass;
+    particles->radius = temp_particles.radius;
+    particles->colors = temp_particles.colors;
+    particles->p_x    = temp_particles.p_x;
+    particles->p_y    = temp_particles.p_y;
+    particles->v_x    = temp_particles.v_x;
+    particles->v_y    = temp_particles.v_y;
 }
 
-void particlesAddParticle( struct Particles_t *particles, const Vector2 particle_i_position, const uint32_t particle_i_mass, const uint32_t particle_i_radius, uint32_t num_particles ) {
+void particlesAddParticle( struct Particles_t *particles, const Vector2 particle_i_position, const float particle_i_mass, const float particle_i_radius, uint8_t num_particles ) {
 
     // Expand size of arrays if they are full
     if ( particles->length + num_particles >= particles->size ) {
@@ -301,26 +266,26 @@ void particlesAddParticle( struct Particles_t *particles, const Vector2 particle
         particles->length += 1;
 
         // add new particle
-        size_t index                   = particles->length;
-        particles->mass[ index ]       = particle_i_mass;
-        particles->radius[ index ]     = particle_i_radius;
-        particles->colors[ index ]     = BLUE;
-        particles->position[ index ].x = (float)particle_i_position.x + particle_i_radius * ( num_particles - 1 );
-        particles->position[ index ].y = (float)particle_i_position.y + particle_i_radius * ( num_particles - 1 );
-        particles->velocity[ index ].x = 0.0f;
-        particles->velocity[ index ].y = 0.0f;
+        size_t index               = particles->length;
+        particles->mass[ index ]   = particle_i_mass;
+        particles->radius[ index ] = particle_i_radius;
+        particles->colors[ index ] = BLUE;
+        particles->p_y[ index ]    = (float)particle_i_position.y;
+        particles->v_x[ index ]    = 0.0f;
+        particles->v_y[ index ]    = 0.0f;
+        particles->p_x[ index ]    = (float)particle_i_position.x;
     }
 }
 
 void particlesRemoveParticle( struct Particles_t *particles ) {
-    size_t index                   = particles->length;
-    particles->mass[ index ]       = 0.0f;
-    particles->radius[ index ]     = 0.0f;
-    particles->colors[ index ]     = RAYWHITE;
-    particles->position[ index ].x = 0.0f;
-    particles->position[ index ].y = 0.0f;
-    particles->velocity[ index ].x = 0.0f;
-    particles->velocity[ index ].y = 0.0f;
+    size_t index               = particles->length;
+    particles->mass[ index ]   = 0.0f;
+    particles->radius[ index ] = 0.0f;
+    particles->colors[ index ] = RAYWHITE;
+    particles->p_y[ index ]    = 0.0f;
+    particles->v_x[ index ]    = 0.0f;
+    particles->v_y[ index ]    = 0.0f;
+    particles->p_x[ index ]    = 0.0f;
 
     particles->length -= 1;
 }
@@ -347,16 +312,10 @@ Texture2D CreateCircleTexture( int radius ) {
 static int       circleBaseRad = 12;
 static Texture2D circleTex     = { 0 };
 
-// void particlesDraw( struct Particles_t *particles ) {
-//     for ( size_t idx = 0; idx < particles->length; idx++ ) {
-//         DrawCircleV( particles->position[ idx ], (float)particles->radius[ idx ], particles->colors[ idx ] );
-//     }
-// }
-
 void particlesDraw( struct Particles_t *particles, Texture2D circleTex ) {
 
     for ( size_t i = 0; i < particles->length; i++ ) {
-        Vector2 pos  = particles->position[ i ];
+        Vector2 pos  = { particles->p_x[ i ], particles->p_y[ i ] };
         float   rad  = particles->radius[ i ];
         Color   tint = particles->colors[ i ];
 

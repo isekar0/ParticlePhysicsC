@@ -1,5 +1,6 @@
 #include "../includes/particles_solver.h"
 
+#include "../includes/constants.h"
 #include "../includes/particles_arrays.h"
 #include "../includes/structs.h"
 #include "../includes/utils.h"
@@ -10,129 +11,25 @@
 #include <stdint.h>
 #include <stdio.h>
 
-// Solver constants
-#define SOLVER_TUNER 0.3f // larger values can cause this phenomenon where extra energy/momentum is introduced to the system, values greater than 0.4 result is massive impulse spikes
-#define EPSILON 1e-8f     // small value for division by zero correction
-#define DEPTH_CAP 0.05f
-#define SLOP_FACTOR 0.01f
-#define BAUMGARTE 0.2f
-#define GRAVITY 9.81f // Negated so it can be used correctly (positive makes particles go down)
-#define AIR_RESISTENCE 0.2
-#define RESTITUTION 0.9
-#define DAMPING_WALL 0.9
-#define TIMESTEP_FACTOR 5 // time_step /= TIMESTEP_FACTOR
-#define ENERGY_MIN 1e-4
-#define CELL_SIZE_FACTOR 2 // cell size = k * max_radius; 1 <= k <= 2
-
-// Array constants
-#define NUM_INIT_SIZE 60
-#define ARRAY_GROWTH_FACTOR 2
-
 // https://stackoverflow.com/a/35212639
 // https://en.wikipedia.org/wiki/Elastic_collision
-// OPTIMIZE
-struct Tuple_Vector2_t particlesResolveVelocity( uint32_t m1, uint32_t m2, Vector2 v1, Vector2 v2, Vector2 *p1, Vector2 *p2, uint32_t r1, uint32_t r2, float time_step ) {
-
-    // Euclidean distance between the two particles
-    float euclid_distance_squared = ( p1->x - p2->x ) * ( p1->x - p2->x ) + ( p1->y - p2->y ) * ( p1->y - p2->y );
-    euclid_distance_squared       = fmaxf( euclid_distance_squared, EPSILON ); // in case it is too close to zero
-    float euclid_distance         = sqrtf( euclid_distance_squared );
-    // inverse of each mass
-    float m1_inverse = 1.0f / m1;
-    float m2_inverse = 1.0f / m2;
-
-    // the contact normal between the two particles
-    Vector2 contact_normal;
-    if ( euclid_distance < EPSILON ) {
-        euclid_distance  = 1;
-        contact_normal.x = 1.0f;
-        contact_normal.y = 0.0f;
-    } else {
-        contact_normal.x = ( p1->x - p2->x ) / euclid_distance;
-        contact_normal.y = ( p1->y - p2->y ) / euclid_distance;
-    }
-
-    // positional correction if there is some penetration
-    float velocity_correction_term = 0; // set to non zero if there is penetration
-    float penetration_depth_corrected;
-    float penetration_depth = r1 + r2 - euclid_distance;
-
-    if ( penetration_depth > 0.0f ) {
-
-        float penetration_depth_max = DEPTH_CAP * fminf( r1, r2 );
-        penetration_depth_corrected = penetration_depth * SOLVER_TUNER;
-        penetration_depth_corrected = fmaxf( -penetration_depth_max, fminf( penetration_depth_corrected, penetration_depth_max ) );
-
-        float p1_factor = ( m1_inverse / ( m1_inverse + m2_inverse ) ) * penetration_depth_corrected;
-        float p2_factor = ( m2_inverse / ( m1_inverse + m2_inverse ) ) * penetration_depth_corrected;
-
-        // correct positions
-        p1->x += p1_factor * contact_normal.x;
-        p1->y += p1_factor * contact_normal.y;
-        p2->x -= p2_factor * contact_normal.x;
-        p2->y -= p2_factor * contact_normal.y;
-
-        // recompute
-        euclid_distance  = sqrtf( fmaxf( ( p1->x - p2->x ) * ( p1->x - p2->x ) + ( p1->y - p2->y ) * ( p1->y - p2->y ), EPSILON ) );
-        contact_normal.x = ( p1->x - p2->x ) / euclid_distance;
-        contact_normal.y = ( p1->y - p2->y ) / euclid_distance;
-
-        float residual_depth = penetration_depth - penetration_depth_corrected;
-
-        // set velocity_correction_term to a non zero value if the remaining depth fulfills the condition
-        float slop = SLOP_FACTOR * fmaxf( r1, r2 );
-        if ( residual_depth > slop ) {
-            velocity_correction_term = BAUMGARTE * ( residual_depth - slop ) / time_step;
-            // velocity_correction_term = ( BAUMGARTE / ( m1 + m2 ) ) * residual_depth;
-        }
-    }
-
-    // Component of relative velocity between the particles will also be the same
-    Vector2 relative_velocity = { v1.x - v2.x, v1.y - v2.y };
-    float   velocity_normal   = relative_velocity.x * contact_normal.x + relative_velocity.y * contact_normal.y;
-
-    if ( velocity_normal > 0.0f && velocity_correction_term == 0.0f ) {
-        struct Tuple_Vector2_t old_velocities = { v1, v2 };
-        return old_velocities;
-    }
-
-    float velocity_normal_desired = -RESTITUTION * velocity_normal + velocity_correction_term;
-
-    float scalar_impulse = ( velocity_normal_desired - velocity_normal ) / ( m1_inverse + m2_inverse );
-
-    Vector2 vector_impulse = { scalar_impulse * contact_normal.x, scalar_impulse * contact_normal.y };
-
-    Vector2 v1_prime = { v1.x + vector_impulse.x * m1_inverse, v1.y + vector_impulse.y * m1_inverse };
-    Vector2 v2_prime = { v2.x - vector_impulse.x * m2_inverse, v2.y - vector_impulse.y * m2_inverse };
-
-    struct Tuple_Vector2_t new_velocities = { v1_prime, v2_prime };
-
-    return new_velocities;
-}
-
 void particlesUpdate( struct Particles_t *particles, const float time_step ) {
     // float highest_energy_iteration = 0;
     for ( size_t idx = 0; idx < particles->length; idx++ ) {
         // update the positions
-        particles->position[ idx ].x += 0.5 * 0 * time_step * time_step + particles->velocity[ idx ].x * time_step;
-        particles->position[ idx ].y += 0.5 * GRAVITY * time_step * time_step + particles->velocity[ idx ].y * time_step;
+        particles->p_x[ idx ] += 0.5 * 0 * time_step * time_step + particles->v_x[ idx ] * time_step;
+        particles->p_y[ idx ] += 0.5 * GRAVITY * time_step * time_step + particles->v_y[ idx ] * time_step;
 
         // update the velocities
-        // particles->velocity[ idx ].x += 0 * time_step * AIR_RESISTENCE;
-        // particles->velocity[ idx ].y += GRAVITY * time_step * AIR_RESISTENCE;
-        float speed_idx = particles->velocity[ idx ].x * particles->velocity[ idx ].x + particles->velocity[ idx ].y * particles->velocity[ idx ].y;
-        // float sqrt_speed_idx = sqrtf( speed_idx );
+        particles->v_x[ idx ] *= ( 1 - AIR_RESISTENCE * time_step );
+        particles->v_y[ idx ] *= ( 1 - AIR_RESISTENCE * time_step );
 
-        // Vector2 drag_velocity = { -AIR_RESISTENCE * particles->velocity[ idx ].x * sqrt_speed_idx, -AIR_RESISTENCE * particles->velocity[ idx ].y * sqrt_speed_idx };
-
-        particles->velocity[ idx ].x *= ( 1 - AIR_RESISTENCE * time_step );
-        particles->velocity[ idx ].y *= ( 1 - AIR_RESISTENCE * time_step );
-
-        particles->velocity[ idx ].x += GRAVITY * time_step;
-        particles->velocity[ idx ].y += GRAVITY * time_step;
+        particles->v_x[ idx ] += GRAVITY * time_step;
+        particles->v_y[ idx ] += GRAVITY * time_step;
 
         // update the color
-        float temp = ( particles->mass[ idx ] * speed_idx + ENERGY_MIN ) / ( 1000000 - ENERGY_MIN );
+        float speed_idx = particles->v_x[ idx ] * particles->v_x[ idx ] + particles->v_y[ idx ] * particles->v_y[ idx ];
+        float temp      = ( particles->mass[ idx ] * speed_idx + ENERGY_MIN ) / ( 1000000 - ENERGY_MIN );
 
         temp           = clamp_f( temp, 0, 1 );
         float nth_root = 3.0f;
@@ -140,134 +37,33 @@ void particlesUpdate( struct Particles_t *particles, const float time_step ) {
 
         particles->colors[ idx ]   = TransformH( RED, 240 * ( 1 - temp ) );
         particles->colors[ idx ].a = 255;
+
+        // Check Highest values
     }
 }
-
-void particlesCollisionsCheck_SweepPrune( struct Particles_t *particles,
-                                          struct BoundEntry  *BE,
-                                          const uint16_t      window_width,
-                                          const uint16_t      window_height,
-                                          float               time_step ) {
-    size_t N = particles->length;
-
-    // 1) Wall‐bounce / boundary checks (unchanged from before)
-    for ( size_t idx = 0; idx < N; idx++ ) {
-        float x = particles->position[ idx ].x;
-        float y = particles->position[ idx ].y;
-        float r = (float)particles->radius[ idx ];
-
-        if ( x <= r ) {
-            particles->position[ idx ].x = r;
-            particles->velocity[ idx ].x *= -DAMPING_WALL;
-        }
-        if ( x >= window_width - r ) {
-            particles->position[ idx ].x = window_width - r;
-            particles->velocity[ idx ].x *= -DAMPING_WALL;
-        }
-        if ( y <= r ) {
-            particles->position[ idx ].y = r;
-            particles->velocity[ idx ].y *= -DAMPING_WALL;
-        }
-        if ( y >= window_height - r ) {
-            particles->position[ idx ].y = window_height - r;
-            particles->velocity[ idx ].y *= -DAMPING_WALL;
-        }
-    }
-
-    // If there are 0 or 1 particles, there are no pairwise collisions:
-    if ( N < 2 )
-        return;
-
-    // --- 2) Sweep-and-prune over sorted slots 0..N-1 ---
-    for ( size_t a = 0; a < N - 1; a++ ) {
-        // “a” is the pivot slot.  Retrieve its particle index i:
-        int      i     = BE->idx[ a ];
-        float    maxXi = BE->maxX[ a ]; // right edge of particle i’s x-interval
-        float    px_i  = particles->position[ i ].x;
-        float    py_i  = particles->position[ i ].y;
-        float    ri    = (float)particles->radius[ i ];
-        uint32_t m1    = particles->mass[ i ];
-
-        // Compare against b = a+1.. until BE->minX[b] > maxXi
-        for ( size_t b = a + 1; b < N; b++ ) {
-            // If the next slot’s left edge exceeds pivot’s right edge, we’re done
-            if ( BE->minX[ b ] > maxXi ) {
-                break;
-            }
-
-            // Otherwise, perform a full 2D circle-circle test
-            int   j    = BE->idx[ b ]; // the actual particle index at slot b
-            float px_j = particles->position[ j ].x;
-            float py_j = particles->position[ j ].y;
-            float rj   = (float)particles->radius[ j ];
-
-            // dx² + dy² <= (ri + rj)² ?
-            float rsum = ri + rj;
-            float dx   = px_i - px_j;
-
-            // if ( dx > rsum || dx < -rsum ) {
-            //     break;
-            // }
-
-            float dy = py_i - py_j;
-
-            // if ( dy > rsum || dy < -rsum ) {
-            //     break;
-            // }
-
-            float dist2 = dx * dx + dy * dy;
-            if ( dist2 <= ( rsum * rsum ) ) {
-                // They overlap—resolve via your existing impulse solver.
-                uint32_t m2 = particles->mass[ j ];
-                Vector2  v1 = particles->velocity[ i ];
-                Vector2  v2 = particles->velocity[ j ];
-
-                // Pass pointers so that positional correction actually updates particles->position[...]:
-                struct Tuple_Vector2_t new_vs =
-                    particlesResolveVelocity(
-                        m1, m2,
-                        v1, v2,
-                        &particles->position[ i ],
-                        &particles->position[ j ],
-                        (uint32_t)ri, (uint32_t)rj,
-                        time_step );
-
-                particles->velocity[ i ] = new_vs.vec1;
-                particles->velocity[ j ] = new_vs.vec2;
-            }
-        }
-    }
-}
-
-struct Pair {
-    int i, j;
-};
 
 typedef struct {
-    int     i, j;                  // indices of the two colliding particles
-    float   distance;              // Euclidean distance
-    Vector2 normal;                // contact normal (unit)
-    float   penetration_depth;     // raw depth
-    float   penetration_corrected; // clamped depth
-    float   velocity_correction;   // Baumgarte term, if any
-    float   scalar_impulse;        // final impulse magnitude
-    Vector2 impulse_vec;           // impulse vector = scalar_impulse * normal
+    int   i, j;     // indices of the two colliding particles
+    float distance; // Euclidean distance
+    float normal_x; // contact normal (unit)
+    float normal_y;
+    float penetration_depth;     // raw depth
+    float penetration_corrected; // clamped depth
+    float velocity_correction;   // Baumgarte term, if any
+    float scalar_impulse;        // final impulse magnitude
+    float impulse_vec_x;         // impulse vector = scalar_impulse * normal
+    float impulse_vec_y;
 } CollisionIntermediate;
 
-void particlesResolveVelocity_NEW(
-    struct Particles_t *particles,
-    struct Pair        *collisions,
-    size_t              collisionCount,
-    float               time_step ) {
-
+void particlesResolveVelocity( struct Particles_t *particles, struct Pair *collisions, size_t collisionCount, float time_step ) {
     size_t N = particles->length;
     if ( collisionCount == 0 || N < 2 )
         return;
 
     // 1) Allocate one big array of intermediates (heap):
     CollisionIntermediate *ci =
-        (CollisionIntermediate *)malloc(
-            collisionCount * sizeof( CollisionIntermediate ) );
+        (CollisionIntermediate *)aligned_alloc(
+            32, collisionCount * sizeof( CollisionIntermediate ) );
     if ( !ci )
         return; // out of memory
 
@@ -286,19 +82,19 @@ void particlesResolveVelocity_NEW(
         ci[ idx ].j = collisions[ idx ].j;
 
         // --- A) Compute dx, dy, dist, normal ---
-        float dx           = particles->position[ i ].x - particles->position[ j ].x;
-        float dy           = particles->position[ i ].y - particles->position[ j ].y;
+        float dx           = particles->p_x[ i ] - particles->p_x[ j ];
+        float dy           = particles->p_y[ i ] - particles->p_y[ j ];
         float dist2        = dx * dx + dy * dy;
         dist2              = fmaxf( dist2, EPSILON );
         float dist         = sqrtf( dist2 );
         ci[ idx ].distance = dist;
 
         if ( dist < EPSILON ) {
-            ci[ idx ].normal.x = 1.0f;
-            ci[ idx ].normal.y = 0.0f;
+            ci[ idx ].normal_x = 1.0f;
+            ci[ idx ].normal_y = 0.0f;
         } else {
-            ci[ idx ].normal.x = dx / dist;
-            ci[ idx ].normal.y = dy / dist;
+            ci[ idx ].normal_x = dx / dist;
+            ci[ idx ].normal_y = dy / dist;
         }
 
         // --- B) Compute penetration depths + correction ---
@@ -339,10 +135,11 @@ void particlesResolveVelocity_NEW(
         if ( i < 0 || j < 0 )
             continue;
 
-        float    dist = ci[ idx ].distance;
-        Vector2  n    = ci[ idx ].normal;
-        uint32_t m1   = particles->mass[ i ];
-        uint32_t m2   = particles->mass[ j ];
+        float   dist = ci[ idx ].distance;
+        float   n_x  = ci[ idx ].normal_x;
+        float   n_y  = ci[ idx ].normal_y;
+        uint8_t m1   = particles->mass[ i ];
+        uint8_t m2   = particles->mass[ j ];
 
         // --- A) Positional correction (move out of penetration) ---
         if ( ci[ idx ].penetration_depth > 0.0f ) {
@@ -352,17 +149,21 @@ void particlesResolveVelocity_NEW(
             float p1factor = ( invM1 / totalInv ) * ci[ idx ].penetration_corrected;
             float p2factor = ( invM2 / totalInv ) * ci[ idx ].penetration_corrected;
 
-            particles->position[ i ].x += p1factor * n.x;
-            particles->position[ i ].y += p1factor * n.y;
-            particles->position[ j ].x -= p2factor * n.x;
-            particles->position[ j ].y -= p2factor * n.y;
+            particles->p_x[ i ] += p1factor * n_x;
+            particles->p_y[ i ] += p1factor * n_y;
+            particles->p_x[ j ] -= p2factor * n_x;
+            particles->p_y[ j ] -= p2factor * n_y;
         }
 
         // --- B) Compute current relative velocity along normal ---
-        Vector2 v1             = particles->velocity[ i ];
-        Vector2 v2             = particles->velocity[ j ];
-        Vector2 rel            = { v1.x - v2.x, v1.y - v2.y };
-        float   velAlongNormal = rel.x * n.x + rel.y * n.y;
+        float v1_x  = particles->v_x[ i ];
+        float v1_y  = particles->v_y[ i ];
+        float v2_x  = particles->v_x[ j ];
+        float v2_y  = particles->v_y[ j ];
+        float rel_x = v1_x - v2_x;
+        float rel_y = v1_y - v2_y;
+
+        float velAlongNormal = rel_x * n_x + rel_y * n_y;
 
         // If they are separating (velAlongNormal > 0) and no Baumgarte push,
         // skip the impulse.
@@ -379,14 +180,14 @@ void particlesResolveVelocity_NEW(
         float jmag  = ( vNormDesired - velAlongNormal ) / denom;
 
         ci[ idx ].scalar_impulse = jmag;
-        ci[ idx ].impulse_vec.x  = jmag * n.x;
-        ci[ idx ].impulse_vec.y  = jmag * n.y;
+        ci[ idx ].impulse_vec_x  = jmag * n_x;
+        ci[ idx ].impulse_vec_y  = jmag * n_y;
 
         // --- D) Apply velocity change to both particles ---
-        particles->velocity[ i ].x += invM1 * ci[ idx ].impulse_vec.x;
-        particles->velocity[ i ].y += invM1 * ci[ idx ].impulse_vec.y;
-        particles->velocity[ j ].x -= invM2 * ci[ idx ].impulse_vec.x;
-        particles->velocity[ j ].y -= invM2 * ci[ idx ].impulse_vec.y;
+        particles->v_x[ i ] += invM1 * ci[ idx ].impulse_vec_x;
+        particles->v_y[ i ] += invM1 * ci[ idx ].impulse_vec_y;
+        particles->v_x[ j ] -= invM2 * ci[ idx ].impulse_vec_x;
+        particles->v_y[ j ] -= invM2 * ci[ idx ].impulse_vec_y;
     }
 
     // 4) Clean up:
@@ -404,25 +205,25 @@ void particlesCollisionsCheck_Grid(
         return;
 
     for ( size_t idx = 0; idx < N; idx++ ) {
-        float x = particles->position[ idx ].x;
-        float y = particles->position[ idx ].y;
+        float x = particles->p_x[ idx ];
+        float y = particles->p_y[ idx ];
         float r = (float)particles->radius[ idx ];
 
         if ( x <= r ) {
-            particles->position[ idx ].x = r;
-            particles->velocity[ idx ].x *= -DAMPING_WALL;
+            particles->p_x[ idx ] = r;
+            particles->v_x[ idx ] *= -DAMPING_WALL;
         }
         if ( x >= window_width - r ) {
-            particles->position[ idx ].x = window_width - r;
-            particles->velocity[ idx ].x *= -DAMPING_WALL;
+            particles->p_x[ idx ] = window_width - r;
+            particles->v_x[ idx ] *= -DAMPING_WALL;
         }
         if ( y <= r ) {
-            particles->position[ idx ].y = r;
-            particles->velocity[ idx ].y *= -DAMPING_WALL;
+            particles->p_y[ idx ] = r;
+            particles->v_y[ idx ] *= -DAMPING_WALL;
         }
         if ( y >= window_height - r ) {
-            particles->position[ idx ].y = window_height - r;
-            particles->velocity[ idx ].y *= -DAMPING_WALL;
+            particles->p_y[ idx ] = window_height - r;
+            particles->v_y[ idx ] *= -DAMPING_WALL;
         }
     }
 
@@ -450,8 +251,8 @@ void particlesCollisionsCheck_Grid(
     // 4) Allocate & initialize the "head of list" per cell.
     //    We'll use an array of length `cellCount`, each entry is
     //    the index of the first particle in that bucket (or -1 if empty).
-    int *cellHeads   = (int *)malloc( cellCount * sizeof( int ) );
-    int *nextIndices = (int *)malloc( N * sizeof( int ) );
+    int *cellHeads   = (int *)aligned_alloc( 32, cellCount * sizeof( int ) );
+    int *nextIndices = (int *)aligned_alloc( 32, N * sizeof( int ) );
     if ( !cellHeads || !nextIndices ) {
         // Allocation failure: clean up and return
         if ( cellHeads )
@@ -470,8 +271,8 @@ void particlesCollisionsCheck_Grid(
     //    Compute (cx, cy) = floor(x/cellSize), floor(y/cellSize).
     //    Cell index = cy*cols + cx. Then push into that bucket.
     for ( int i = 0; i < (int)N; i++ ) {
-        float px = particles->position[ i ].x;
-        float py = particles->position[ i ].y;
+        float px = particles->p_x[ i ];
+        float py = particles->p_y[ i ];
 
         // Clamp into [0..width) or [0..height). If out of bounds,
         // you can either skip or clamp to valid cell. We assume the
@@ -508,10 +309,10 @@ void particlesCollisionsCheck_Grid(
     }
     size_t collisionCount = 0;
     for ( int i = 0; i < (int)N; i++ ) {
-        float px = particles->position[ i ].x;
-        float py = particles->position[ i ].y;
+        float px = particles->p_x[ i ];
+        float py = particles->p_y[ i ];
         float ri = (float)particles->radius[ i ];
-        // uint32_t m1 = particles->mass[ i ];
+        // uint8_t m1 = particles->mass[ i ];
         // Vector2  v1 = particles->velocity[ i ];
 
         // Recompute the cell of i (slightly redundant but simpler)
@@ -543,8 +344,8 @@ void particlesCollisionsCheck_Grid(
                     if ( j <= i )
                         continue;
 
-                    float px_j = particles->position[ j ].x;
-                    float py_j = particles->position[ j ].y;
+                    float px_j = particles->p_x[ j ];
+                    float py_j = particles->p_y[ j ];
                     float rj   = (float)particles->radius[ j ];
 
                     // Quick AABB‐style reject (optional, but x/y separation check is cheap):
@@ -581,7 +382,8 @@ void particlesCollisionsCheck_Grid(
         }
     }
 
-    particlesResolveVelocity_NEW( particles, collisions, collisionCount, time_step );
+    // particlesResolveVelocity_NEW( particles, collisions, collisionCount, time_step );
+    particlesResolveVelocity( particles, collisions, collisionCount, time_step );
 
 // 7) Free our temporary arrays
 cleanup:

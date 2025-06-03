@@ -8,19 +8,21 @@
 
 struct Particles_t {
     // varying values
-    Color   *colors;
-    Vector2 *position; // raylib 2D vector = { .x, .y }
-    Vector2 *velocity;
+    // Vector2 *velocity;
+    // Vector2 *position; // raylib 2D vector = { .x, .y }
+    float *v_x, *v_y;
+    float *p_x, *p_y;
+    Color *colors;
     // fixed values
-    uint32_t *mass;
-    uint32_t *radius;
+    float *mass;
+    float *radius;
     // Metadata
     size_t length;
     size_t size;
 };
 
-struct Tuple_Vector2_t {
-    Vector2 vec1, vec2;
+struct Pair {
+    int i, j;
 };
 
 // A helper struct for sorting by minX
