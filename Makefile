@@ -1,5 +1,5 @@
 CC = clang
-CFlags = -std=c99 # -Wall -Wextra -pedantic-errors 
+CFlags = -std=c11 # -Wall -Wextra -pedantic-errors 
 Debug = 0
 Libs  = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
 Src = src
